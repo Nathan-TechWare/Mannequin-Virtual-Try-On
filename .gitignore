@@ -1,0 +1,39 @@
+# Virtual environments
+anny_env/
+pipeline_env/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Generated outputs
+*.obj
+*.ply
+*.glb
+keypoint_alignment.png
+
+# Pipeline outputs (regenerated each run)
+smpl_anthropometry/measurements.json
+ai_tailor/user_inputs.json
+ai_tailor/fitted_smplx_mesh.obj
+ai_tailor/fitted_smplx_mesh_colored.ply
+
+# Uploaded photos (user data)
+ai_tailor/uploads/*
+!ai_tailor/uploads/.gitkeep
+
+# SMPL-X models (too large + licensed)
+ai_tailor/models/*
+!ai_tailor/models/.gitkeep
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/

@@ -1,0 +1,68 @@
+/* iOS-style drum picker. Two side-by-side wheels for feet + inches. */
+
+.drum-picker {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    height: 200px;
+    position: relative;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.drum-wheel {
+    height: 200px;
+    width: 72px;
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding: 80px 0; /* leaves room for first/last items to reach centre */
+    mask-image: linear-gradient(to bottom,
+        transparent 0%, black 30%, black 70%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom,
+        transparent 0%, black 30%, black 70%, transparent 100%);
+}
+.drum-wheel::-webkit-scrollbar { display: none; }
+
+.drum-item {
+    height: 40px;
+    line-height: 40px;
+    text-align: center;
+    font-size: 22px;
+    color: #c7c7cc;
+    scroll-snap-align: center;
+    transition: color 0.15s ease, font-size 0.15s ease, font-weight 0.15s ease;
+    font-variant-numeric: tabular-nums;
+}
+
+.drum-item.selected {
+    color: #1d1d1f;
+    font-weight: 600;
+    font-size: 26px;
+}
+
+.drum-label {
+    font-size: 15px;
+    color: #6e6e73;
+    padding: 0 4px;
+    font-weight: 500;
+}
+
+/* Selection indicator lines (subtle) */
+.drum-picker::before,
+.drum-picker::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 200px;
+    max-width: 100%;
+    height: 1px;
+    background: #e5e5e7;
+    pointer-events: none;
+}
+.drum-picker::before { top: calc(50% - 20px); }
+.drum-picker::after  { top: calc(50% + 20px); }

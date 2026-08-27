@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Tailor — Upload Photos</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='drum-picker.css') }}">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0; padding: 40px 20px; background: #f5f5f7; color: #1d1d1f;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 720px; margin: 0 auto; background: white;
+            border-radius: 18px; padding: 40px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        }
+        h1 { margin: 0 0 8px; font-size: 28px; }
+        .subtitle { color: #6e6e73; margin: 0 0 32px; font-size: 15px; }
+        .section { margin-bottom: 32px; }
+        .section-title { font-weight: 600; margin: 0 0 12px; font-size: 17px; }
+        .photo-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+        }
+        .photo-slot {
+            aspect-ratio: 3/4; border: 2px dashed #d2d2d7; border-radius: 12px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            cursor: pointer; background: #fafafa; transition: all 0.2s;
+            position: relative; overflow: hidden;
+        }
+        .photo-slot:hover { border-color: #0071e3; background: #f0f7ff; }
+        .photo-slot.has-image { border-style: solid; border-color: #0071e3; }
+        .photo-slot.error { border-color: #d70015; background: #fff2f2; }
+        .photo-slot .placeholder { color: #6e6e73; font-size: 13px; text-align: center; padding: 8px; }
+        .photo-slot .label { font-weight: 600; font-size: 14px; color: #1d1d1f; margin-bottom: 4px; }
+        .photo-slot img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+        .photo-slot input[type="file"] { display: none; }
+        .photo-slot .overlay-label {
+            position: absolute; bottom: 8px; left: 8px;
+            background: rgba(0,0,0,0.7); color: white;
+            padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+        }
+        .form-row {
+            display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; align-items: start;
+        }
+        .field label {
+            display: block; font-weight: 500; font-size: 14px;
+            color: #1d1d1f; margin-bottom: 8px;
+        }
+        .field select, .field input[type="number"] {
+            width: 100%; padding: 12px 14px; border: 1px solid #d2d2d7;
+            border-radius: 10px; font-size: 16px; background: white; font-family: inherit;
+        }
+        .field select:focus, .field input:focus { outline: none; border-color: #0071e3; }
+        .field.error select, .field.error input { border-color: #d70015; background: #fff8f8; }
+        .field-error {
+            display: none; color: #d70015; font-size: 12px; margin-top: 4px;
+        }
+        .field.error .field-error { display: block; }
+        .submit-btn {
+            width: 100%; padding: 16px; background: #0071e3; color: white;
+            border: none; border-radius: 12px; font-size: 17px; font-weight: 600;
+            cursor: pointer; margin-top: 16px; transition: background 0.2s;
+        }
+        .submit-btn:hover { background: #0077ed; }
+        .submit-btn:disabled { background: #a3c9f2; cursor: not-allowed; }
+        .error-msg {
+            background: #fff2f2; color: #d70015; padding: 12px 16px;
+            border-radius: 10px; margin-top: 16px; font-size: 14px; display: none;
+        }
+        .spinner-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.9); display: none;
+            align-items: center; justify-content: center; flex-direction: column;
+            z-index: 1000; backdrop-filter: blur(4px);
+        }
+        .spinner {
+            width: 48px; height: 48px; border: 4px solid #e5e5e7;
+            border-top-color: #0071e3; border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        .spinner-text { margin-top: 16px; color: #6e6e73; font-size: 15px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Upload Your Photos</h1>
+        <p class="subtitle">Provide three photos of yourself: front, left side, right side. Then enter your details.</p>
+
+        <form id="upload-form">
+            <div class="section">
+                <div class="section-title">Photos</div>
+                <div class="photo-grid">
+                    <label class="photo-slot" data-slot="front">
+                        <input type="file" name="front" accept="image/*">
+                        <div class="placeholder"><div class="label">Front</div><div>Click to upload</div></div>
+                    </label>
+                    <label class="photo-slot" data-slot="left">
+                        <input type="file" name="left" accept="image/*">
+                        <div class="placeholder"><div class="label">Left Side</div><div>Click to upload</div></div>
+                    </label>
+                    <label class="photo-slot" data-slot="right">
+                        <input type="file" name="right" accept="image/*">
+                        <div class="placeholder"><div class="label">Right Side</div><div>Click to upload</div></div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Height</div>
+                <div id="height-picker"></div>
+                <div style="text-align: center; margin-top: 8px; color: #6e6e73; font-size: 13px;">
+                    <span id="height-cm-display">— cm</span>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="form-row">
+                    <div class="field" id="field-gender">
+                        <label for="gender">Gender</label>
+                        <select id="gender" name="gender">
+                            <option value="">Select…</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                            <option value="neutral">Neutral / Prefer not to say</option>
+                        </select>
+                        <div class="field-error">Please select your gender.</div>
+                    </div>
+                    <div class="field" id="field-weight">
+                        <label for="weight">Weight (kg)</label>
+                        <input type="number" id="weight" name="weight" min="30" max="200" step="0.1" placeholder="e.g. 72">
+                        <div class="field-error">Enter weight between 30–200 kg.</div>
+                    </div>
+                    <div class="field" id="field-age">
+                        <label for="age">Age (years)</label>
+                        <input type="number" id="age" name="age" min="1" max="120" step="1" placeholder="e.g. 30">
+                        <div class="field-error">Enter age between 1–120.</div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submit-btn">Continue</button>
+            <div class="error-msg" id="error-msg"></div>
+        </form>
+    </div>
+
+    <div class="spinner-overlay" id="spinner-overlay">
+        <div class="spinner"></div>
+        <div class="spinner-text" id="spinner-text">Processing your photos…</div>
+    </div>
+
+    <script src="{{ url_for('static', filename='drum-picker.js') }}"></script>
+    <script>
+        // ── Drum picker setup ─────────────────────────
+        const picker = new DrumPicker(document.getElementById('height-picker'), {
+            feet:   { values: [3, 4, 5, 6, 7], initial: 5 },
+            inches: { values: [0,1,2,3,4,5,6,7,8,9,10,11], initial: 8 },
+        });
+        const cmDisplay = document.getElementById('height-cm-display');
+        function updateCmDisplay() {
+            const { feet, inches } = picker.getFeetInches();
+            cmDisplay.textContent = `${feet}′${inches}″  ·  ${picker.getCm()} cm`;
+        }
+        picker.onChange = updateCmDisplay;
+        updateCmDisplay();
+
+        // ── Photo previews ────────────────────────────
+        document.querySelectorAll('.photo-slot').forEach(slot => {
+            const input = slot.querySelector('input[type="file"]');
+            const slotName = slot.dataset.slot;
+            input.addEventListener('change', () => {
+                const file = input.files[0];
+                if (!file) return;
+                slot.classList.remove('error');
+                const url = URL.createObjectURL(file);
+                slot.classList.add('has-image');
+                slot.innerHTML = `
+                    <img src="${url}" alt="${slotName}">
+                    <div class="overlay-label">${slotName}</div>
+                `;
+                const newInput = document.createElement('input');
+                newInput.type = 'file'; newInput.name = slotName;
+                newInput.accept = 'image/*'; newInput.style.display = 'none';
+                newInput.files = input.files;
+                slot.appendChild(newInput);
+            });
+        });
+
+        // Clear field errors on interaction
+        ['gender', 'weight', 'age'].forEach(id => {
+            document.getElementById(id).addEventListener('input', () => {
+                document.getElementById(`field-${id}`).classList.remove('error');
+                document.getElementById('error-msg').style.display = 'none';
+            });
+        });
+
+        // ── Submit with client-side validation ────────
+        const form = document.getElementById('upload-form');
+        const submitBtn = document.getElementById('submit-btn');
+        const errorMsg = document.getElementById('error-msg');
+        const spinnerOverlay = document.getElementById('spinner-overlay');
+
+        function showError(msg) {
+            errorMsg.textContent = msg;
+            errorMsg.style.display = 'block';
+            errorMsg.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorMsg.style.display = 'none';
+
+            // Photo validation — collect all missing
+            const slots = document.querySelectorAll('.photo-slot');
+            const missingPhotos = [];
+            slots.forEach(slot => {
+                slot.classList.remove('error');
+                const input = slot.querySelector('input[type="file"]');
+                if (!input || input.files.length === 0) {
+                    missingPhotos.push(slot.dataset.slot);
+                    slot.classList.add('error');
+                }
+            });
+
+            // Field validation
+            const gender = document.getElementById('gender').value;
+            const weight = document.getElementById('weight').value.trim();
+            const age    = document.getElementById('age').value.trim();
+            let hasFieldError = false;
+            document.querySelectorAll('.field').forEach(f => f.classList.remove('error'));
+
+            if (!gender) {
+                document.getElementById('field-gender').classList.add('error');
+                hasFieldError = true;
+            }
+            const weightNum = parseFloat(weight);
+            if (!weight || isNaN(weightNum) || weightNum < 30 || weightNum > 200) {
+                document.getElementById('field-weight').classList.add('error');
+                hasFieldError = true;
+            }
+            const ageNum = parseFloat(age);
+            if (!age || isNaN(ageNum) || ageNum < 1 || ageNum > 120) {
+                document.getElementById('field-age').classList.add('error');
+                hasFieldError = true;
+            }
+
+            // Show summary message
+            if (missingPhotos.length > 0 && hasFieldError) {
+                showError('Please upload all photos and fill in every field before continuing.');
+                return;
+            }
+            if (missingPhotos.length === 1) {
+                showError(`Please upload the ${missingPhotos[0]} photo.`);
+                return;
+            }
+            if (missingPhotos.length > 1) {
+                showError(`Please upload all photos. Missing: ${missingPhotos.join(', ')}.`);
+                return;
+            }
+            if (hasFieldError) {
+                showError('Please check the highlighted fields.');
+                return;
+            }
+
+            // Build FormData
+            const fd = new FormData();
+            for (const slot of slots) {
+                const input = slot.querySelector('input[type="file"]');
+                fd.append(slot.dataset.slot, input.files[0]);
+            }
+            fd.append('height_cm', picker.getCm());
+            fd.append('weight_kg', weightNum);
+            fd.append('gender', gender);
+            fd.append('age', ageNum);
+
+            submitBtn.disabled = true;
+            spinnerOverlay.style.display = 'flex';
+
+            try {
+                const res = await fetch('/process_upload', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+                window.location.href = data.redirect || '/measurements';
+            } catch (err) {
+                spinnerOverlay.style.display = 'none';
+                submitBtn.disabled = false;
+                showError(err.message);
+            }
+        });
+    </script>
+</body>
+</html>

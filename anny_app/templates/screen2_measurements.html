@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Tailor — Your Measurements</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0; padding: 40px 20px; background: #f5f5f7; color: #1d1d1f;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 900px; margin: 0 auto; background: white;
+            border-radius: 18px; padding: 40px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        }
+        h1 { margin: 0 0 8px; font-size: 28px; }
+        .subtitle { color: #6e6e73; margin: 0 0 24px; font-size: 15px; }
+
+        .summary {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+            margin-bottom: 32px;
+        }
+        .summary-item {
+            padding: 14px 16px; background: #f5f5f7; border-radius: 12px;
+        }
+        .summary-item .label {
+            font-size: 11px; color: #6e6e73; text-transform: uppercase;
+            letter-spacing: 0.5px; margin-bottom: 4px;
+        }
+        .summary-item .value {
+            font-size: 20px; font-weight: 600; color: #1d1d1f;
+        }
+
+        .section-title {
+            font-weight: 600; font-size: 14px; color: #6e6e73;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            margin: 24px 0 12px;
+        }
+        .measurements-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+        }
+        .measure-row {
+            display: flex; justify-content: space-between; padding: 12px 16px;
+            background: #fafafa; border-radius: 10px; font-size: 14px;
+        }
+        .measure-row .name { color: #1d1d1f; }
+        .measure-row .value { color: #0071e3; font-weight: 600; text-align: right; }
+
+        .warnings {
+            background: #fff8e6; color: #b25000; padding: 12px 16px;
+            border-radius: 10px; margin-bottom: 24px; font-size: 13px; display: none;
+        }
+        .warnings ul { margin: 4px 0 0 20px; padding: 0; }
+
+        .actions { display: flex; gap: 12px; margin-top: 32px; }
+        .btn {
+            flex: 1; padding: 14px 20px; border-radius: 12px;
+            font-size: 16px; font-weight: 600; text-decoration: none;
+            text-align: center; cursor: pointer; border: none; font-family: inherit;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: #0071e3; color: white; }
+        .btn-primary:hover { background: #0077ed; }
+        .btn-secondary { background: #f5f5f7; color: #1d1d1f; }
+        .btn-secondary:hover { background: #ebebed; }
+
+        .loading { text-align: center; padding: 60px 0; color: #6e6e73; }
+
+        @media (max-width: 700px) {
+            .summary { grid-template-columns: repeat(2, 1fr); }
+            .measurements-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Your Measurements</h1>
+        <p class="subtitle">These are the values that will shape your 3D mesh. Review, then continue to fine-tune.</p>
+        <div id="content"><div class="loading">Loading measurements…</div></div>
+    </div>
+
+    <script>
+        // ── Formatting helpers (same formulas as Screen 3 overlay) ──
+        function muscleLabel(v) {
+            if (v < 0.2) return "Slim";
+            if (v < 0.4) return "Lean";
+            if (v < 0.6) return "Average";
+            if (v < 0.8) return "Athletic";
+            return "Very Muscular";
+        }
+        function proportionsFormat(v) {
+            const torsoRatio = v * 0.2 + 0.4;
+            const torsoPct = Math.round(torsoRatio * 100);
+            return `${torsoPct}% torso · ${100 - torsoPct}% legs`;
+        }
+        function kgFromPhenotype(v) {
+            return Math.round(v * 80 + 40);
+        }
+        function heightFmt(cm) {
+            const totalIn = cm / 2.54;
+            const ft = Math.floor(totalIn / 12);
+            const inches = Math.round(totalIn - ft * 12);
+            return `${ft}′${inches}″`;
+        }
+        function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+        // Local-change slug -> display label (matches Screen 3 slider labels)
+        const LOCAL_LABELS = {
+            'measure-neck-circ-incr':        'Neck Circumference',
+            'measure-waist-circ-incr':       'Waist Circumference',
+            'measure-hips-circ-incr':        'Hip Circumference',
+            'measure-bust-circ-incr':        'Bust / Chest',
+            'measure-thigh-circ-incr':       'Thigh Circumference',
+            'measure-calf-circ-incr':        'Calf Circumference',
+            'measure-upperarm-circ-incr':    'Bicep Circumference',
+            'measure-shoulder-dist-incr':    'Shoulder Breadth',
+            'measure-wrist-circ-incr':       'Wrist Circumference',
+            'measure-ankle-circ-incr':       'Ankle Circumference',
+            'measure-upperarm-length-incr':  'Upper Arm Length',
+            'measure-lowerarm-length-incr':  'Lower Arm Length',
+            'l-lowerarm-fat-incr':           'Forearm Left Thickness',
+            'r-lowerarm-fat-incr':           'Forearm Right Thickness',
+            'measure-upperleg-height-incr':  'Upper Leg Height',
+            'measure-lowerleg-height-incr':  'Lower Leg Height',
+            'measure-napetowaist-dist-incr': 'Nape to Waist Distance',
+        };
+        // Ranges (lo, hi) used to reverse-map [-1, 1] slider values back to cm.
+        // Must match INITIAL_LOCAL ranges in app.py.
+        const LOCAL_RANGES = {
+            'measure-neck-circ-incr':        [25.0, 55.0],
+            'measure-waist-circ-incr':       [50.0, 130.0],
+            'measure-hips-circ-incr':        [65.0, 145.0],
+            'measure-bust-circ-incr':        [60.0, 140.0],
+            'measure-thigh-circ-incr':       [35.0, 85.0],
+            'measure-calf-circ-incr':        [22.0, 55.0],
+            'measure-upperarm-circ-incr':    [18.0, 55.0],
+            'measure-shoulder-dist-incr':    [25.0, 55.0],
+            'measure-wrist-circ-incr':       [10.0, 25.0],
+            'measure-ankle-circ-incr':       [15.0, 35.0],
+            'measure-upperarm-length-incr':  [25.0, 40.0],
+            'measure-lowerarm-length-incr':  [28.0, 42.0],
+            'l-lowerarm-fat-incr':           [18.0, 38.0],
+            'r-lowerarm-fat-incr':           [18.0, 38.0],
+            'measure-upperleg-height-incr':  [35.0, 55.0],
+            'measure-lowerleg-height-incr':  [28.0, 45.0],
+            'measure-napetowaist-dist-incr': [32.0, 50.0],
+        };
+        function localToCm(slug, val) {
+            const [lo, hi] = LOCAL_RANGES[slug] || [0, 100];
+            const mid = (lo + hi) / 2;
+            // reverse of incr(x, lo, hi) = clamp((x - mid) / (hi - lo) * 2, -1, 1)
+            return (val * (hi - lo) / 2) + mid;
+        }
+
+        async function load() {
+            try {
+                const res = await fetch('/initial_values');
+                const data = await res.json();
+                render(data);
+            } catch (err) {
+                document.getElementById('content').innerHTML =
+                    `<div class="loading">Could not load measurements: ${err.message}</div>`;
+            }
+        }
+
+        function render(data) {
+            const p = data.phenotypes;
+            const lc = data.local_changes;
+
+            // Prefer user-supplied weight_kg; fall back to reverse-mapped phenotype
+            const weightKg = data.weight_kg != null
+                ? Math.round(data.weight_kg)
+                : kgFromPhenotype(p.weight);
+
+            // Summary cards
+            const summary = `
+                <div class="summary">
+                    <div class="summary-item">
+                        <div class="label">Height</div>
+                        <div class="value">${heightFmt(data.height_cm)}</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="label">Weight</div>
+                        <div class="value">${weightKg} kg</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="label">Gender</div>
+                        <div class="value">${capitalize(data.gender)}</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="label">Age</div>
+                        <div class="value">${Math.round(data.age_years)} yrs</div>
+                    </div>
+                </div>
+            `;
+
+            // Phenotype rows (excludes gender/age/height/cupsize/african/asian/caucasian)
+            const phenotypeRows = [
+                { name: 'Muscle',      value: muscleLabel(p.muscle) },
+                { name: 'Proportions', value: proportionsFormat(p.proportions) },
+                { name: 'Firmness / Tone', value: `${p.firmness.toFixed(2)} of 1.00` },
+            ].map(r => `
+                <div class="measure-row">
+                    <span class="name">${r.name}</span>
+                    <span class="value">${r.value}</span>
+                </div>
+            `).join('');
+
+            // Local change rows (all in cm)
+            const localRows = Object.entries(LOCAL_LABELS).map(([slug, label]) => {
+                if (!(slug in lc)) return '';
+                const cm = localToCm(slug, lc[slug]);
+                return `
+                    <div class="measure-row">
+                        <span class="name">${label}</span>
+                        <span class="value">${cm.toFixed(1)} cm</span>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('content').innerHTML = `
+                ${summary}
+                <div class="section-title">Body Shape</div>
+                <div class="measurements-grid">${phenotypeRows}</div>
+                <div class="section-title">Detailed Measurements</div>
+                <div class="measurements-grid">${localRows}</div>
+                <div class="actions">
+                    <a href="/" class="btn btn-secondary">Upload Again</a>
+                    <a href="/mesh" class="btn btn-primary">Continue to 3D Mesh</a>
+                </div>
+            `;
+        }
+
+        load();
+    </script>
+</body>
+</html>
