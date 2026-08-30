@@ -283,7 +283,26 @@
                 const res = await fetch('/process_upload', { method: 'POST', body: fd });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'Something went wrong.');
-                window.location.href = data.redirect || '/measurements';
+
+                const jobId = data.job_id;
+                document.getElementById('spinner-text').textContent = 'Processing your photos… this can take a minute.';
+
+                let attempts = 0;
+                const poll = async () => {
+                    attempts++;
+                    const statusRes = await fetch(`/job_status/${jobId}`);
+                    const statusData = await statusRes.json();
+                    if (statusData.status === 'ready') {
+                        window.location.href = statusData.redirect || '/measurements';
+                    } else if (attempts > 150) {  // ~5 min at 2s intervals
+                        spinnerOverlay.style.display = 'none';
+                        submitBtn.disabled = false;
+                        showError('This is taking longer than expected. Please try again.');
+                    } else {
+                        setTimeout(poll, 2000);
+                    }
+                };
+                poll();
             } catch (err) {
                 spinnerOverlay.style.display = 'none';
                 submitBtn.disabled = false;

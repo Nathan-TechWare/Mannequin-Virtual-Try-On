@@ -1,8 +1,9 @@
 # Virtual environments
 anny_env/
 pipeline_env/
-venv/
-env/
+.venv/
+.env/
+.env
 
 # Python cache
 __pycache__/
@@ -29,6 +30,8 @@ ai_tailor/uploads/*
 # SMPL-X models (too large + licensed)
 ai_tailor/models/*
 !ai_tailor/models/.gitkeep
+smpl
+smplx
 
 # OS files
 .DS_Store

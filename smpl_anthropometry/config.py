@@ -1,8 +1,8 @@
 import os
 
 # ── Edit these two lines for your machine ────────────────────
-AI_TAILOR_DIR = r'C:\Users\USER\Desktop\AI-Tailor\full_pipeline'
-SMPL_DIR      = r'C:\Users\USER\Desktop\SMPL-Anthropometry'
+AI_TAILOR_DIR = r'C:\Users\Adminstrator\Downloads\Mannequin-Virtual-Try-On\ai_tailor'
+SMPL_DIR      = r'C:\Users\Adminstrator\Downloads\Mannequin-Virtual-Try-On\smpl_anthropometry'
 
 # ── These are derived automatically — do not edit ────────────
 USER_INPUTS_PATH  = os.path.join(AI_TAILOR_DIR, 'user_inputs.json')

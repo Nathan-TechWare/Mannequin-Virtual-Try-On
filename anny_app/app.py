@@ -11,6 +11,9 @@ import subprocess
 from datetime import datetime
 from PIL import Image
 import sys
+import requests
+
+AI_TAILOR_API_URL = os.environ.get("AI_TAILOR_API_URL", "http://localhost:8000")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import AI_TAILOR_DIR, SMPL_DIR, UPLOADS_DIR, MEASUREMENTS_PATH, FACE_PARAMS_PATH
 
@@ -279,7 +282,6 @@ def _friendly_error(pipeline_name, stderr_tail):
 @app.route('/process_upload', methods=['POST'])
 def process_upload():
     try:
-        # Read form fields
         height_cm = request.form.get('height_cm', '').strip()
         weight_kg = request.form.get('weight_kg', '').strip()
         gender_v  = request.form.get('gender', '').strip().lower()
@@ -298,7 +300,6 @@ def process_upload():
         if not (1 <= age_float <= 120):
             return jsonify({'error': 'Age must be between 1 and 120.'}), 400
 
-        # Validate photos
         missing = [k for k in ('front', 'left', 'right')
                    if k not in request.files or request.files[k].filename == '']
         if missing:
@@ -306,54 +307,56 @@ def process_upload():
                 return jsonify({'error': f'Please upload the {missing[0]} photo.'}), 400
             return jsonify({'error': f'Please upload all photos. Missing: {", ".join(missing)}.'}), 400
 
-        # Save photos with timestamp, convert to PNG
-        ts = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        # Same HEIC-safe conversion as before, but in-memory -- forwarded
+        # to ai_tailor instead of saved locally, since ai_tailor's /upload
+        # already owns saving into its own job folder.
+        converted = {}
         for key in ('front', 'left', 'right'):
             file = request.files[key]
-            out_path = os.path.join(UPLOADS_DIR, f'{ts}_{key}.png')
             try:
                 img = Image.open(file.stream).convert('RGB')
-                img.save(out_path, 'PNG')
-                print(f"[INFO] Saved upload: {out_path}")
-            except Exception as e:
+            except Exception:
                 return jsonify({
                     'error': f'Could not read your {key} photo. Please try a different file (JPG or PNG works best).'
                 }), 400
+            buf = io.BytesIO()
+            img.save(buf, 'PNG')
+            buf.seek(0)
+            converted[key] = (f'{key}.png', buf, 'image/png')
 
-        # Env vars for pipelines
-        env = os.environ.copy()
-        env['USER_HEIGHT_CM'] = str(height_int)
-        env['USER_WEIGHT_KG'] = str(weight_float)
-        env['USER_GENDER']    = gender_v
-        env['USER_AGE']       = str(age_float)
+        form_data = {
+            'gender': gender_v,
+            'height_cm': height_int,
+            'weight_kg': weight_float,
+            'age': int(age_float),  # int, not float -- FastAPI's `age: int` will
+                                     # reject a stringified "30.0"
+        }
 
-        # Run AI-Tailor
-        print("[INFO] Running AI-Tailor pipeline...")
-        result = subprocess.run(['python', AI_TAILOR_SCRIPT],
-            cwd=AI_TAILOR_DIR, env=env, capture_output=True, text=True, timeout=600)
-        if result.returncode != 0:
-            return jsonify({'error': _friendly_error('AI-Tailor', result.stderr[-2000:])}), 500
-        print("[INFO] AI-Tailor done.")
+        resp = requests.post(f"{AI_TAILOR_API_URL}/upload", files=converted, data=form_data, timeout=30)
+        if resp.status_code != 200:
+            detail = resp.json().get('detail', 'Failed to queue job.')
+            return jsonify({'error': detail}), 502
 
-        # Run SMPL-Anthropometry
-        print("[INFO] Running SMPL-Anthropometry pipeline...")
-        result = subprocess.run(['python', SMPL_SCRIPT],
-            cwd=SMPL_DIR, env=env, capture_output=True, text=True, timeout=300)
-        if result.returncode != 0:
-            return jsonify({'error': _friendly_error('SMPL-Anthropometry', result.stderr[-2000:])}), 500
-        print("[INFO] SMPL-Anthropometry done.")
+        return jsonify({'status': 'queued', 'job_id': resp.json()['job_id']})
 
-        _reload_state_from_disk()
-        print("[INFO] State reloaded.")
-
-        return jsonify({'status': 'ok', 'redirect': url_for('screen2_measurements')})
-
-    except subprocess.TimeoutExpired:
-        return jsonify({'error': 'Processing took too long. Please try again.'}), 500
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': f'Could not reach the AI-Tailor service: {e}'}), 502
+    except Exception:
+        import traceback; traceback.print_exc()
         return jsonify({'error': 'Something went wrong. Please try again.'}), 500
+
+
+@app.route('/job_status/<job_id>')
+def check_job_status(job_id):
+    try:
+        with open(measurements_path, 'r') as f:
+            on_disk = json.load(f)
+        if on_disk.get('job_id') == job_id:
+            _reload_state_from_disk()
+            return jsonify({'status': 'ready', 'redirect': url_for('screen2_measurements')})
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return jsonify({'status': 'processing'})
 
 
 # ══════════════════════════════════════════════════════════════

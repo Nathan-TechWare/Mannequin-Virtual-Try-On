@@ -1,8 +1,8 @@
 import os
 
 # ── Edit these two lines for your machine ────────────────────
-AI_TAILOR_DIR = r'C:\Users\USER\Desktop\AI-Tailor\full_pipeline'
-SMPL_DIR      = r'C:\Users\USER\Desktop\SMPL-Anthropometry'
+AI_TAILOR_DIR = r'C:\Users\Adminstrator\Downloads\AI-Tailor (1)\AI-Tailor\full_pipeline'
+SMPL_DIR      = r'C:\Users\Adminstrator\Downloads\SMPL-Anthropometry\SMPL-Anthropometry'
 
 # ── These are derived automatically — do not edit ────────────
 MODEL_PATH        = os.path.join(AI_TAILOR_DIR, 'models')
