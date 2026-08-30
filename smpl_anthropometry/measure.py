@@ -38,16 +38,16 @@ def create_model(model_type, model_root, gender, num_betas=10, num_thetas=24):
     :param num_betas: int of number of shape coefficients
                       requires the model with num_coefs in model_root
     :param num_thetas: int of number of pose coefficients
-    
+
     Return:
     :param smplx body model (SMPL, SMPLX, etc.)
     '''
-    
+
     #body_pose = torch.zeros((1, (num_thetas-1) * 3))
-    
+
     return smplx.create(model_path=model_root,
                         model_type=model_type,
-                        gender=gender, 
+                        gender=gender,
                         use_face_contour=False,
                         num_betas=num_betas,
                         #body_pose=body_pose,
@@ -81,7 +81,7 @@ class Measurer():
     def from_body_model(self):
         pass
 
-    def measure(self, 
+    def measure(self,
                 measurement_names: List[str]
                 ):
         '''
@@ -107,7 +107,7 @@ class Measurer():
 
                 value = self.measure_circumference(m_name)
                 self.measurements[m_name] = value
-    
+
             else:
                 print(f"Measurement {m_name} not defined")
 
@@ -126,11 +126,11 @@ class Measurer():
         for i in range(2):
             if isinstance(measurement_landmarks_inds[i],tuple):
                 # if touple of indices for landmark, take their average
-                lm = (self.verts[measurement_landmarks_inds[i][0]] + 
+                lm = (self.verts[measurement_landmarks_inds[i][0]] +
                           self.verts[measurement_landmarks_inds[i][1]]) / 2
             else:
                 lm = self.verts[measurement_landmarks_inds[i]]
-            
+
             landmark_points.append(lm)
 
         landmark_points = np.vstack(landmark_points)[None,...]
@@ -141,11 +141,11 @@ class Measurer():
     def _get_dist(verts: np.ndarray) -> float:
         '''
         The Euclidean distance between vertices.
-        The distance is found as the sum of each pair i 
-        of 3D vertices (i,0,:) and (i,1,:) 
-        :param verts: np.ndarray (N,2,3) - vertices used 
+        The distance is found as the sum of each pair i
+        of 3D vertices (i,0,:) and (i,1,:)
+        :param verts: np.ndarray (N,2,3) - vertices used
                         to find distances
-        
+
         Returns:
         :param dist: float, sumed distances between vertices
         '''
@@ -154,14 +154,14 @@ class Measurer():
         distance = np.sum(verts_distances)
         distance_cm = distance * 100 # convert to cm
         return distance_cm
-    
-    def measure_circumference(self, 
-                              measurement_name: str, 
+
+    def measure_circumference(self,
+                              measurement_name: str,
                               ):
         '''
-        Measure circumferences. Circumferences are defined with 
-        landmarks and joints - the measurement is found by cutting the 
-        SMPL model with the  plane defined by a point (landmark point) and 
+        Measure circumferences. Circumferences are defined with
+        landmarks and joints - the measurement is found by cutting the
+        SMPL model with the  plane defined by a point (landmark point) and
         normal (vector connecting the two joints).
         :param measurement_name: str - measurement name
 
@@ -174,42 +174,42 @@ class Measurer():
         circumf_landmark_indices = [self.landmarks[l_name] for l_name in circumf_landmarks]
         circumf_n1, circumf_n2 = self.circumf_definitions[measurement_name]["JOINTS"]
         circumf_n1, circumf_n2 = self.joint2ind[circumf_n1], self.joint2ind[circumf_n2]
-        
+
         plane_origin = np.mean(self.verts[circumf_landmark_indices,:],axis=0)
         plane_normal = self.joints[circumf_n1,:] - self.joints[circumf_n2,:]
 
         mesh = trimesh.Trimesh(vertices=self.verts, faces=self.faces)
 
-        # new version            
-        slice_segments, sliced_faces = trimesh.intersections.mesh_plane(mesh, 
-                                plane_normal=plane_normal, 
-                                plane_origin=plane_origin, 
+        # new version
+        slice_segments, sliced_faces = trimesh.intersections.mesh_plane(mesh,
+                                plane_normal=plane_normal,
+                                plane_origin=plane_origin,
                                 return_faces=True) # (N, 2, 3), (N,)
-        
+
         slice_segments = filter_body_part_slices(slice_segments,
                                                  sliced_faces,
                                                  measurement_name,
                                                  self.circumf_2_bodypart,
                                                  self.face_segmentation)
-        
+
         slice_segments_hull = convex_hull_from_3D_points(slice_segments)
 
         return self._get_dist(slice_segments_hull)
 
     def height_normalize_measurements(self, new_height: float):
-        ''' 
+        '''
         Scale all measurements so that the height measurement gets
         the value of new_height:
         new_measurement = (old_measurement / old_height) * new_height
         NOTE the measurements and body model remain unchanged, a new
         dictionary height_normalized_measurements is created.
-        
+
         Input:
         :param new_height: float, the newly defined height.
 
         Return:
-        self.height_normalized_measurements: dict of 
-                {measurement:value} pairs with 
+        self.height_normalized_measurements: dict of
+                {measurement:value} pairs with
                 height measurement = new_height, and other measurements
                 scaled accordingly
         '''
@@ -229,7 +229,7 @@ class Measurer():
         Create labeled_measurements dictionary with "label: x cm" structure
         for each given measurement.
         NOTE: This overwrites any prior labeling!
-        
+
         :param set_measurement_labels: dict of labels and measurement names
                                         (example. {"A": "head_circumference"})
         '''
@@ -241,7 +241,7 @@ class Measurer():
         self.labels2names = {}
 
         for set_label, set_name in set_measurement_labels.items():
-            
+
             if set_name not in self.all_possible_measurements:
                 print(f"Measurement {set_name} not defined.")
                 pass
@@ -253,7 +253,7 @@ class Measurer():
             self.labels2names[set_label] = set_name
 
     def visualize(self,
-                 measurement_names: List[str] = [], 
+                 measurement_names: List[str] = [],
                  landmark_names: List[str] = [],
                  title="Measurement visualization",
                  visualize_body: bool = True,
@@ -268,12 +268,12 @@ class Measurer():
         #     model = create_model(self.smpl_path, "MALE", num_coefs=10)
         #     shape = torch.zeros((1, 10), dtype=torch.float32)
         #     model_output = set_shape(model, shape)
-            
+
         #     verts = model_output.vertices.detach().cpu().numpy().squeeze()
         #     faces = model.faces.squeeze()
         # else:
         #     verts = self.verts
-        #     faces = self.faces 
+        #     faces = self.faces
 
         if measurement_names == []:
             measurement_names = self.all_possible_measurements
@@ -298,7 +298,7 @@ class Measurer():
                         visualize_measurements=visualize_measurements,
                         title=title
                         )
-        
+
         vizz.visualize(measurement_names=measurement_names,
                        landmark_names=landmark_names,
                        title=title)
@@ -307,18 +307,18 @@ class Measurer():
 class MeasureSMPL(Measurer):
     '''
     Measure the SMPL model defined either by the shape parameters or
-    by its 6890 vertices. 
+    by its 6890 vertices.
 
     All the measurements are expressed in cm.
     '''
 
     def __init__(self):
-        
+
         super().__init__()
 
         self.model_type = "smpl"
         self.body_model_root = "data"
-        self.body_model_path = os.path.join(self.body_model_root, 
+        self.body_model_path = os.path.join(self.body_model_root,
                                             self.model_type)
 
         self.faces = smplx.SMPL(self.body_model_path, ext="pkl").faces
@@ -343,15 +343,15 @@ class MeasureSMPL(Measurer):
         '''
         Construct body model from only vertices.
         :param verts: torch.tensor (6890,3) of SMPL vertices
-        '''        
+        '''
 
         verts = verts.squeeze()
         error_msg = f"verts need to be of dimension ({self.num_points},3)"
         assert verts.shape == torch.Size([self.num_points,3]), error_msg
 
-        joint_regressor = get_joint_regressor(self.model_type, 
+        joint_regressor = get_joint_regressor(self.model_type,
                                               self.body_model_root,
-                                              gender="NEUTRAL", 
+                                              gender="NEUTRAL",
                                               num_thetas=self.num_joints)
         joints = torch.matmul(joint_regressor, verts)
         self.joints = joints.numpy()
@@ -361,20 +361,20 @@ class MeasureSMPL(Measurer):
                         gender: str,
                         shape: torch.tensor):
         '''
-        Construct body model from given gender and shape params 
+        Construct body model from given gender and shape params
         of SMPl model.
         :param gender: str, MALE or FEMALE or NEUTRAL
         :param shape: torch.tensor, (1,10) beta parameters
                                     for SMPL model
-        '''  
+        '''
 
-        model = create_model(model_type=self.model_type, 
-                             model_root=self.body_model_root, 
+        model = create_model(model_type=self.model_type,
+                             model_root=self.body_model_root,
                              gender=gender,
                              num_betas=10,
-                             num_thetas=self.num_joints)    
+                             num_thetas=self.num_joints)
         model_output = set_shape(model, shape)
-        
+
         self.verts = model_output.vertices.detach().cpu().numpy().squeeze()
         self.joints = model_output.joints.squeeze().detach().cpu().numpy()
         self.gender = gender
@@ -383,18 +383,18 @@ class MeasureSMPL(Measurer):
 class MeasureSMPLX(Measurer):
     '''
     Measure the SMPLX model defined either by the shape parameters or
-    by its 10475 vertices. 
+    by its 10475 vertices.
 
     All the measurements are expressed in cm.
     '''
 
     def __init__(self):
-        
+
         super().__init__()
 
         self.model_type = "smplx"
         self.body_model_root = "data"
-        self.body_model_path = os.path.join(self.body_model_root, 
+        self.body_model_path = os.path.join(self.body_model_root,
                                             self.model_type)
 
         self.faces = smplx.SMPLX(self.body_model_path, ext="pkl").faces
@@ -419,15 +419,15 @@ class MeasureSMPLX(Measurer):
         '''
         Construct body model from only vertices.
         :param verts: torch.tensor (10475,3) of SMPLX vertices
-        '''        
+        '''
 
         verts = verts.squeeze()
         error_msg = f"verts need to be of dimension ({self.num_points},3)"
         assert verts.shape == torch.Size([self.num_points,3]), error_msg
 
-        joint_regressor = get_joint_regressor(self.model_type, 
+        joint_regressor = get_joint_regressor(self.model_type,
                                               self.body_model_root,
-                                              gender="NEUTRAL", 
+                                              gender="NEUTRAL",
                                               num_thetas=self.num_joints)
         joints = torch.matmul(joint_regressor, verts)
         self.joints = joints.numpy()
@@ -437,20 +437,20 @@ class MeasureSMPLX(Measurer):
                         gender: str,
                         shape: torch.tensor):
         '''
-        Construct body model from given gender and shape params 
+        Construct body model from given gender and shape params
         of SMPl model.
         :param gender: str, MALE or FEMALE or NEUTRAL
         :param shape: torch.tensor, (1,10) beta parameters
                                     for SMPL model
-        '''  
+        '''
 
-        model = create_model(model_type=self.model_type, 
-                             model_root=self.body_model_root, 
+        model = create_model(model_type=self.model_type,
+                             model_root=self.body_model_root,
                              gender=gender,
                              num_betas=10,
-                             num_thetas=self.num_joints)    
+                             num_thetas=self.num_joints)
         model_output = set_shape(model, shape)
-        
+
         self.verts = model_output.vertices.detach().cpu().numpy().squeeze()
         self.joints = model_output.joints.squeeze().detach().cpu().numpy()
         self.gender = gender

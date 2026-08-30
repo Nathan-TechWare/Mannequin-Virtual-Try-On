@@ -216,12 +216,11 @@ ai_tailor/models/
 
 ```
 smpl_anthropometry/data/
-  smpl/
-    smpl_body_parts_2_faces.json
   smplx/
     SMPLX_MALE.pkl
     SMPLX_FEMALE.pkl
     SMPLX_NEUTRAL.pkl
+    smpl_body_parts_2_faces.json
 ```
 
 ### Step 5 — Set up the RabbitMQ topology
