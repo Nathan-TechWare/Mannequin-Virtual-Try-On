@@ -1,0 +1,58 @@
+# ── Anny Server Image ─────────────────────────────────────────
+# Builds the environment for app.py:
+# Flask web server + Anny parametric body model + Three.js UI.
+#
+# Base: official Python 3.11 slim (Debian-based).
+# This is the main entry point — serves the three-screen UI
+# and orchestrates the two pipeline containers.
+
+FROM python:3.11-slim
+
+# ── System dependencies ───────────────────────────────────────
+# libgomp1: required by PyTorch for CPU multi-threading
+# libgl1 + libglib2.0-0: required by trimesh
+# libheif-dev: required by pillow-heif for HEIC photo support
+RUN apt-get update && apt-get install -y \
+    libgomp1 \
+    libgl1 \
+    libglib2.0-0 \
+    libheif-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Working directory ─────────────────────────────────────────
+WORKDIR /app
+
+# ── Install Python dependencies ───────────────────────────────
+# Copied first so Docker can cache this layer independently of code.
+# The anny package downloads its model weights (~500MB) on first run,
+# not at build time — so the image stays leaner.
+COPY anny_app/requirements_anny.txt .
+RUN pip install --no-cache-dir --timeout=300 -r requirements_anny.txt
+
+# ── Copy application code ─────────────────────────────────────
+COPY anny_app/ ./anny_app/
+
+# ── Shared volume mount point ─────────────────────────────────
+# /data is where the shared volume will be mounted at runtime.
+# Anny server reads measurements.json from here (written by SMPL)
+# and saves uploaded photos here (read by AI-Tailor).
+RUN mkdir -p /data
+
+# ── Anny model cache ──────────────────────────────────────────
+# Anny downloads its weights to ~/.cache/anny/ on first run.
+# Pointing the cache to /cache allows it to persist across
+# container restarts via a named volume in docker-compose.yml.
+ENV ANNY_CACHE_DIR=/cache/anny
+RUN mkdir -p /cache/anny
+
+# ── Port ──────────────────────────────────────────────────────
+# Flask serves on port 5000. Exposed here so docker-compose.yml
+# can map it to the host machine (e.g. localhost:5000).
+EXPOSE 5000
+
+# ── Default command ───────────────────────────────────────────
+# Runs the Flask server.
+# 0.0.0.0 makes Flask listen on all network interfaces inside
+# the container — required so the host machine can reach it.
+CMD ["python", "anny_app/app.py", "--host=0.0.0.0"]
